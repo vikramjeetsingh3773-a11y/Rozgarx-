@@ -153,4 +153,4 @@ jobs:
           echo "### 📱 How to install:" >> $GITHUB_STEP_SUMMARY
           echo "1. Scroll down to **Artifacts** section below" >> $GITHUB_STEP_SUMMARY
           echo "2. Download **RozgarX-AI-...-arm64-release** (best for most phones)" >> $GITHUB_STEP_SUMMARY
-          echo "3. Unzip → install the .apk on your Android phone" >> $GITHUB_STEP_SUMMARY 
+          echo "3. Unzip → install the .apk on your Android phone" >> $GITHUB_STEP_SUMMARY
