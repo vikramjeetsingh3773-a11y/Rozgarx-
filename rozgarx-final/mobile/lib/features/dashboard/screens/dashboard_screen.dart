@@ -43,7 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .where('importantDates.lastDate',
               isGreaterThan: Timestamp.fromDate(now))
           .where('importantDates.lastDate',
-              isLessThanOrEqual: Timestamp.fromDate(weekLater))
+              isLessThanOrEqualTo: Timestamp.fromDate(weekLater)
           .orderBy('importantDates.lastDate')
           .limit(5)
           .get();
