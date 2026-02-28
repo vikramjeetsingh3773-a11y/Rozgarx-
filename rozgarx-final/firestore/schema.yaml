@@ -1,0 +1,515 @@
+# RozgarX AI — Complete Firestore Schema
+# Version: 1.0 | Production-Grade | Optimized for 1M+ Users
+# ============================================================
+# Rules:
+#   - No nested arrays of objects (Firestore limitation)
+#   - Sub-collections for high-write / high-volume data
+#   - All timestamps use Firestore Timestamp type
+#   - Analytics written by Cloud Functions only
+#   - Pagination: 20 docs per page max
+# ============================================================
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: users/{userId}
+# ────────────────────────────────────────────────────────────
+
+users/{userId}:
+  # Identity
+  uid: string                    # = Firebase Auth UID
+  email: string
+  displayName: string
+  photoURL: string | null
+  phoneNumber: string | null
+  createdAt: Timestamp
+  lastLoginAt: Timestamp
+
+  # Role & Access
+  role: "user" | "premium" | "admin" | "superadmin"
+  subscriptionStatus: "free" | "active" | "expired" | "cancelled"
+  subscriptionPlan: "monthly" | "quarterly" | "yearly" | null
+  subscriptionExpiry: Timestamp | null
+  subscriptionId: string | null   # Razorpay subscription ID
+
+  # Onboarding Profile
+  profile:
+    educationLevel: "10th" | "12th" | "graduate" | "postgraduate"
+    targetExams: string[]         # ["SSC_CGL", "IBPS_PO", ...]
+    state: string                 # "UP", "Bihar", "Rajasthan" ...
+    preferredLanguage: "en" | "hi"
+    preparationStage: "beginner" | "intermediate" | "advanced"
+    dailyStudyHours: number
+    targetSalary: string | null
+    attemptHistory: string[]      # Previous attempts
+    strengthSubjects: string[]
+    weakSubjects: string[]
+    onboardingComplete: boolean
+
+  # Device & Network (detected on first load, stored once)
+  deviceInfo:
+    deviceMemory: number | null   # GB, from navigator.deviceMemory
+    connectionType: "slow-2g" | "2g" | "3g" | "4g" | null
+    bandwidthCategory: "low" | "medium" | "high"
+    platform: "android" | "ios" | "desktop"
+    detectedAt: Timestamp
+
+  # AI Personalization
+  aiProfile:
+    recommendedExams: string[]
+    successProbabilityScore: number   # 0-100
+    lastGeneratedAt: Timestamp | null
+    aiQueriesUsedToday: number        # reset daily by Cloud Function
+    aiQueryLimit: number              # 5 free, 999 premium
+
+  # Engagement
+  engagement:
+    studyStreak: number
+    lastStudyDate: Timestamp | null
+    totalMockTestsTaken: number
+    averageScore: number
+
+  # Status
+  isActive: boolean
+  isBanned: boolean
+  banReason: string | null
+
+  # Sub-collections:
+  # users/{userId}/studyPlans/{planId}
+  # users/{userId}/savedJobs/{jobId}
+  # users/{userId}/notifications/{notifId}
+  # users/{userId}/adUnlocks/{jobId}
+
+
+# ── Sub-collection: users/{userId}/studyPlans/{planId}
+users/{userId}/studyPlans/{planId}:
+  planId: string
+  examTarget: string              # "SSC_CGL"
+  planType: "30day" | "60day" | "90day"
+  generatedAt: Timestamp
+  syllabus:
+    - subject: string
+      topics: string[]
+      weeklyTarget: number        # hours
+  dailyTargets:
+    - day: number
+      tasks: string[]
+      mockTest: boolean
+      completedAt: Timestamp | null
+  completionPercent: number       # updated by user actions
+  isActive: boolean
+
+
+# ── Sub-collection: users/{userId}/savedJobs/{jobId}
+users/{userId}/savedJobs/{jobId}:
+  jobId: string
+  savedAt: Timestamp
+  jobTitle: string                # denormalized for offline display
+  category: string
+  lastDate: Timestamp
+
+
+# ── Sub-collection: users/{userId}/notifications/{notifId}
+users/{userId}/notifications/{notifId}:
+  type: "new_job" | "deadline" | "admit_card" | "result" | "study_reminder"
+  title: string
+  body: string
+  jobId: string | null
+  read: boolean
+  createdAt: Timestamp
+
+
+# ── Sub-collection: users/{userId}/adUnlocks/{jobId}
+users/{userId}/adUnlocks/{jobId}:
+  jobId: string
+  userId: string
+  unlockedAt: Timestamp
+  expiresAt: Timestamp            # unlockedAt + 24 hours
+  # Immutable — cannot be updated after creation
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: jobs/{jobId}
+# ────────────────────────────────────────────────────────────
+
+jobs/{jobId}:
+  # Core Identity
+  jobId: string                   # auto-generated
+  urlHash: string                 # SHA256 of source URL (duplicate detection)
+  titleHash: string               # normalized title hash
+
+  # Basic Info
+  basicInfo:
+    title: string
+    organization: string
+    department: string | null
+    category: "SSC" | "Railway" | "Banking" | "Defence" | "StatePSC" | "Police" | "Teaching" | "Private"
+    subCategory: string           # "SSC_CGL", "RRB_NTPC" etc.
+    state: string | null          # null = All India
+    zone: string | null           # For Railway zone-wise
+    vacancies: number | null
+    salary: string | null         # "₹25,500 – ₹81,100"
+    jobType: "permanent" | "contractual" | "temporary"
+
+  # Eligibility
+  eligibility:
+    educationRequired: string[]   # ["Graduate", "10+2"]
+    ageMin: number | null
+    ageMax: number | null
+    ageRelaxation: string | null
+    physicalCriteria: string | null   # For Police/Defence
+    experienceRequired: string | null
+    nationality: string           # default "Indian"
+
+  # Important Dates
+  importantDates:
+    notificationDate: Timestamp | null
+    applicationStartDate: Timestamp | null
+    lastDate: Timestamp | null      # ← indexed for expiry logic
+    examDate: Timestamp | null
+    admitCardDate: Timestamp | null
+    resultDate: Timestamp | null
+
+  # Application Details
+  applicationDetails:
+    applicationFee: string | null     # "₹100 for General"
+    applicationLink: string | null
+    officialWebsite: string
+    officialNotificationPDF: string | null   # Firebase Storage URL
+    selectionProcess: string[]        # ["Written Test", "Physical", "Interview"]
+    applicationMode: "online" | "offline" | "both"
+
+  # Metadata & Status
+  metadata:
+    status: "pending" | "approved" | "rejected" | "needs_review" | "archived"
+    needsReview: boolean
+    source: string                # source registry ID
+    sourceUrl: string
+    scrapedAt: Timestamp
+    approvedAt: Timestamp | null
+    approvedBy: string | null     # admin userId
+    lastVerifiedAt: Timestamp
+    parsingStatus: "success" | "partial" | "failed"
+    rawTextRef: string | null     # Firebase Storage path (not stored inline)
+    createdAt: Timestamp
+    updatedAt: Timestamp
+
+  # Analytics (written by Cloud Function, not client)
+  analytics:
+    competitionLevel: "low" | "medium" | "high" | "extreme"
+    competitionScore: number      # 0-100
+    estimatedApplicants: number | null
+    predictedCutoffMin: number | null
+    predictedCutoffMax: number | null
+    difficultyScore: number       # 0-100
+    difficultyTag: string         # "Highly Competitive"
+    vacancyTrend: "increasing" | "stable" | "decreasing" | null
+    analyticsGeneratedAt: Timestamp | null
+    coldStart: boolean            # true if <3 historical records used
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: archivedJobs/{jobId}
+# ────────────────────────────────────────────────────────────
+# Auto-populated by Cloud Function when lastDate + 7 days passed
+# Same schema as jobs/{jobId} with additional:
+
+archivedJobs/{jobId}:
+  # (all fields from jobs/{jobId}) +
+  archivedAt: Timestamp
+  archivedReason: "expired" | "duplicate" | "admin_action"
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: jobAnalytics/{jobId}
+# ────────────────────────────────────────────────────────────
+# Written by Cloud Functions only — never by client
+
+jobAnalytics/{jobId}:
+  jobId: string
+  category: string
+  competitionScore: number        # 0-100
+  predictedCutoffMin: number | null
+  predictedCutoffMax: number | null
+  difficultyLevel: "low" | "medium" | "high" | "extreme"
+  estimatedApplicants: number | null
+  historicalTrend:
+    - year: number
+      vacancies: number
+      estimatedApplicants: number | null
+      cutoffGeneral: number | null
+  coldStart: boolean
+  generatedAt: Timestamp
+  modelVersion: string            # track AI model used
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: sources/{sourceId}
+# ────────────────────────────────────────────────────────────
+
+sources/{sourceId}:
+  sourceId: string
+  name: string                    # "Staff Selection Commission"
+  shortName: string               # "SSC"
+  baseUrl: string
+  notificationsUrl: string
+  category: string
+  robotsTxtParsed: boolean
+  disallowedPaths: string[]       # from robots.txt
+  scraperConfig:
+    selectors:
+      titleSelector: string
+      dateSelector: string
+      linkSelector: string
+      pdfSelector: string
+    useOCR: boolean
+    requiresJS: boolean
+  status: "active" | "failing" | "blocked" | "structure_changed" | "paused"
+  consecutiveFailures: number
+  lastSuccessAt: Timestamp | null
+  lastCheckedAt: Timestamp | null
+  avgResponseTimeMs: number
+  createdAt: Timestamp
+  updatedAt: Timestamp
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: scraperLogs/{logId}
+# ────────────────────────────────────────────────────────────
+
+scraperLogs/{logId}:
+  logId: string
+  sourceId: string
+  runId: string                   # batch run identifier
+  status: "success" | "partial" | "failed" | "blocked"
+  jobsFound: number
+  newJobsAdded: number
+  duplicatesSkipped: number
+  parsingFailed: number
+  durationMs: number
+  errorMessage: string | null
+  errorType: string | null        # "timeout" | "blocked" | "structure_changed" | "pdf_error"
+  runAt: Timestamp
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: errorLogs/{logId}
+# ────────────────────────────────────────────────────────────
+
+errorLogs/{logId}:
+  module: "scraper" | "ai_parser" | "pdf_processor" | "analytics" | "notification" | "subscription"
+  severity: "warning" | "error" | "critical"
+  message: string
+  stack: string | null
+  context: map                    # arbitrary context data
+  resolvedAt: Timestamp | null
+  resolvedBy: string | null
+  createdAt: Timestamp
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: mockTests/{testId}
+# ────────────────────────────────────────────────────────────
+
+mockTests/{testId}:
+  testId: string
+  title: string
+  category: string
+  subCategory: string | null
+  durationMinutes: number
+  totalQuestions: number
+  totalMarks: number
+  negativeMarking: number         # e.g. 0.25
+  isPremium: boolean
+  sections:
+    - sectionName: string
+      questionCount: number
+      marks: number
+  createdAt: Timestamp
+  createdBy: string               # admin userId
+
+  # Sub-collection:
+  # mockTests/{testId}/questions/{questionId}
+
+
+# ── Sub-collection: mockTests/{testId}/questions/{questionId}
+mockTests/{testId}/questions/{questionId}:
+  questionId: string
+  sectionName: string
+  questionText: string
+  options:
+    a: string
+    b: string
+    c: string
+    d: string
+  correctAnswer: "a" | "b" | "c" | "d"
+  explanation: string | null
+  difficulty: "easy" | "medium" | "hard"
+  topic: string
+  marks: number
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: testResults/{resultId}
+# ────────────────────────────────────────────────────────────
+
+testResults/{resultId}:
+  resultId: string
+  userId: string                  # indexed
+  testId: string
+  score: number                   # indexed (for leaderboard)
+  totalMarks: number
+  accuracy: number                # percentage
+  timeTakenSeconds: number
+  rank: number | null             # computed by Cloud Function
+  sectionWise:
+    - sectionName: string
+      attempted: number
+      correct: number
+      wrong: number
+      score: number
+  weakTopics: string[]
+  completedAt: Timestamp          # indexed
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: leaderboards/{leaderboardId}
+# ────────────────────────────────────────────────────────────
+
+leaderboards/{leaderboardId}:
+  testId: string
+  updatedAt: Timestamp
+  entries:
+    - rank: number
+      userId: string
+      displayName: string
+      score: number
+      accuracy: number
+  # Max 100 entries, written by Cloud Function
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: resumeAnalysis/{userId}
+# ────────────────────────────────────────────────────────────
+
+resumeAnalysis/{userId}:
+  userId: string
+  # Sub-collection: resumeAnalysis/{userId}/reports/{reportId}
+
+
+# ── Sub-collection: resumeAnalysis/{userId}/reports/{reportId}
+resumeAnalysis/{userId}/reports/{reportId}:
+  reportId: string
+  userId: string
+  storageRef: string              # Firebase Storage path to PDF
+  fileName: string
+  uploadedAt: Timestamp
+  status: "processing" | "complete" | "failed"
+  atsScore: number | null         # 0-100
+  skillMatchPercent: number | null
+  missingKeywords: string[]
+  formattingIssues: string[]
+  suggestions: string[]
+  processedAt: Timestamp | null
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: subscriptions/{subscriptionId}
+# ────────────────────────────────────────────────────────────
+
+subscriptions/{subscriptionId}:
+  subscriptionId: string          # Razorpay subscription ID
+  userId: string
+  plan: "monthly" | "quarterly" | "yearly"
+  status: "active" | "expired" | "cancelled" | "paused"
+  amount: number                  # in paise (₹499 = 49900)
+  currency: "INR"
+  startDate: Timestamp
+  endDate: Timestamp
+  autoRenew: boolean
+  paymentHistory:
+    - paymentId: string
+      amount: number
+      paidAt: Timestamp
+      status: "success" | "failed"
+  webhookValidated: boolean
+  createdAt: Timestamp
+  updatedAt: Timestamp
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: aiUsage/{userId}
+# ────────────────────────────────────────────────────────────
+
+aiUsage/{userId}:
+  userId: string
+  date: string                    # "2025-01-15" (reset daily)
+  queriesUsed: number
+  queryLimit: number              # 5 free, 999 premium
+  lastQueryAt: Timestamp | null
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: adminAnalytics/{docId}
+# ────────────────────────────────────────────────────────────
+
+adminAnalytics/overview:
+  totalUsers: number
+  premiumUsers: number
+  activeSubscriptions: number
+  totalJobs: number
+  totalMockTests: number
+  aiQueriesTotal: number
+  revenueThisMonth: number        # in paise
+  revenueAllTime: number
+  updatedAt: Timestamp
+
+adminAnalytics/userSegments:
+  byCategory: map                 # {"SSC": 45000, "Railway": 32000}
+  byState: map
+  byDevice: map                   # {"low": 40%, "medium": 35%, "high": 25%}
+  byBandwidth: map
+  updatedAt: Timestamp
+
+adminAnalytics/jobStats:
+  mostViewedJobs: string[]        # jobId[]
+  mostCompetitiveCategory: string
+  categoryDistribution: map
+  updatedAt: Timestamp
+
+
+# ────────────────────────────────────────────────────────────
+# COLLECTION: fcmTokens/{userId}
+# ────────────────────────────────────────────────────────────
+
+fcmTokens/{userId}:
+  userId: string
+  tokens: string[]                # multiple devices
+  updatedAt: Timestamp
+
+
+# ────────────────────────────────────────────────────────────
+# STORAGE BUCKET STRUCTURE
+# ────────────────────────────────────────────────────────────
+
+# /pdfs/{jobId}/{filename}.pdf          — Official job notification PDFs
+# /resumes/{userId}/{resumeId}.pdf      — User-uploaded resumes
+# /temp/{runId}/{filename}.pdf          — Scraper temp downloads (auto-deleted 24h)
+
+
+# ────────────────────────────────────────────────────────────
+# COLD-START RULE FOR AI ANALYTICS
+# ────────────────────────────────────────────────────────────
+#
+# If historicalRecords for a category < 3:
+#   → Use category-level defaults from categoryDefaults/{category}
+#   → Set coldStart: true on jobAnalytics document
+#   → Admin dashboard shows cold-start jobs separately
+#
+# Category defaults stored in:
+
+categoryDefaults/{category}:
+  category: string
+  defaultCompetitionLevel: string
+  defaultDifficultyScore: number
+  defaultEstimatedApplicants: number
+  updatedAt: Timestamp

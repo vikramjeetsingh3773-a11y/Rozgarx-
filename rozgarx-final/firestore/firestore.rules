@@ -1,0 +1,159 @@
+rules_version = '2';
+// RozgarX AI — Production Firestore Security Rules
+// Covers all collections from Prompts 4–10
+// Deny by default. Explicitly allow by role.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function role() { return request.auth.token.get('role', 'user'); }
+    function isPremium() { return isSignedIn() && role() in ['premium','admin','superadmin']; }
+    function isAdmin() { return isSignedIn() && role() in ['admin','superadmin','content_admin','finance_admin','support_admin']; }
+    function isSuperAdmin() { return isSignedIn() && role() == 'superadmin'; }
+    function isContentAdmin() { return isSignedIn() && role() in ['content_admin','superadmin']; }
+    function isFinanceAdmin() { return isSignedIn() && role() in ['finance_admin','superadmin']; }
+
+    function hasActiveSub() {
+      return isPremium() && (
+        !('subscriptionExpiry' in request.auth.token) ||
+        request.auth.token.subscriptionExpiry > request.time.toMillis()
+      );
+    }
+
+    function noProtectedFields() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'role','subscription','isBanned','isSuspended','aiUsage'
+      ]);
+    }
+
+    // USERS
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow update: if isOwner(uid) && noProtectedFields();
+      allow create, delete: if false;
+
+      match /savedJobs/{jobId} {
+        allow read, write: if isOwner(uid);
+      }
+      match /appliedJobs/{jobId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid) && request.resource.data.userId == uid;
+        allow update: if isOwner(uid);
+        allow delete: if isOwner(uid);
+      }
+      match /studyPlans/{planId} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+      match /notifications/{notifId} {
+        allow read: if isOwner(uid);
+        allow update: if isOwner(uid) && request.resource.data.keys().hasOnly(['isRead','readAt']);
+        allow create, delete: if false;
+      }
+    }
+
+    // JOBS — public read for approved only
+    match /jobs/{jobId} {
+      allow read: if resource.data.metadata.status == 'approved';
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /archivedJobs/{jobId} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // JOB ANALYTICS — premium only
+    match /jobAnalytics/{jobId} {
+      allow read: if hasActiveSub();
+      allow write: if false;
+    }
+
+    // SUBSCRIPTIONS
+    match /subscriptions/{subId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isFinanceAdmin();
+      allow write: if false;
+    }
+
+    // AD UNLOCKS
+    match /adUnlocks/{unlockId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false;
+    }
+
+    // MOCK TESTS
+    match /mockTests/{testId} {
+      allow read: if isSignedIn() && !resource.data.isPremium;
+      allow read: if hasActiveSub();
+      allow write: if false;
+      match /questions/{qId} {
+        allow read: if isSignedIn() && (
+          !get(/databases/$(database)/documents/mockTests/$(testId)).data.isPremium ||
+          hasActiveSub()
+        );
+        allow write: if false;
+      }
+    }
+
+    match /testResults/{resultId} {
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /leaderboards/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    // ADMIN-ONLY COLLECTIONS
+    match /sources/{id}        { allow read: if isContentAdmin(); allow write: if isSuperAdmin(); }
+    match /scraperLogs/{id}    { allow read: if isContentAdmin(); allow write: if false; }
+    match /parsingLogs/{id}    { allow read: if isContentAdmin(); allow write: if false; }
+    match /errorLogs/{id}      { allow read: if isAdmin(); allow write: if false; }
+    match /securityLogs/{id}   { allow read: if isSuperAdmin(); allow write: if false; }
+    match /adminActions/{id}   { allow read: if isSuperAdmin(); allow write: if false; }
+    match /adminAnalytics/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /purchaseTokens/{id} { allow read, write: if false; }
+
+    // FCM TOKENS
+    match /fcmTokens/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    // PUBLIC READ
+    match /categoryDefaults/{cat} { allow read: if true; allow write: if isSuperAdmin(); }
+    match /featuredConfig/{id}    { allow read: if true; allow write: if isContentAdmin(); }
+
+    // RESUME ANALYSIS
+    match /resumeAnalysis/{uid}/reports/{reportId} {
+      allow read: if isOwner(uid);
+      allow create: if isOwner(uid) && request.resource.data.userId == uid;
+      allow update, delete: if false;
+    }
+
+    // AI USAGE
+    match /aiUsage/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // GDPR DELETION
+    match /deletionQueue/{uid} {
+      allow read: if isOwner(uid) || isSuperAdmin();
+      allow write: if false;
+    }
+
+    // INTERNAL QUEUES
+    match /userCreationQueue/{uid} { allow read, write: if false; }
+
+    // DEFAULT DENY
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
