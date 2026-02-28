@@ -104,7 +104,7 @@ jobs:
           flutter build apk --debug
           echo "Debug APK size:"
           ls -lh build/app/outputs/flutter-apk/app-debug.apk
-
+          
       # ── 11. Build Release APK
       - name: "Build Release APK"
         working-directory: rozgarx-final/mobile
