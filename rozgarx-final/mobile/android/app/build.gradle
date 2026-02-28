@@ -19,15 +19,6 @@ if (flutterVersionCode == null) { flutterVersionCode = '1' }
 def flutterVersionName = localProperties.getProperty('flutter.versionName')
 if (flutterVersionName == null) { flutterVersionName = '1.0' }
 
-// Read signing config from key.properties (created by GitHub Actions)
-def keystoreProperties = new Properties()
-def keystorePropertiesFile = rootProject.file('key.properties')
-if (keystorePropertiesFile.exists()) {
-    keystorePropertiesFile.withReader('UTF-8') { reader ->
-        keystoreProperties.load(reader)
-    }
-}
-
 android {
     namespace "com.rozgarx.ai"
     compileSdk 34
@@ -36,6 +27,7 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
+        coreLibraryDesugaringEnabled true
     }
 
     kotlinOptions {
@@ -44,17 +36,6 @@ android {
 
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
-    }
-
-    signingConfigs {
-        release {
-            if (keystorePropertiesFile.exists()) {
-                keyAlias keystoreProperties['keyAlias']
-                keyPassword keystoreProperties['keyPassword']
-                storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
-                storePassword keystoreProperties['storePassword']
-            }
-        }
     }
 
     defaultConfig {
@@ -68,8 +49,7 @@ android {
 
     buildTypes {
         release {
-            // Use release signing if key.properties exists, else fall back to debug
-            signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+            signingConfig signingConfigs.debug
             minifyEnabled false
             shrinkResources false
         }
@@ -85,6 +65,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring 'com.android.tools.build:desugaring:1.2.2'
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
     implementation 'com.google.firebase:firebase-analytics'
     implementation 'com.google.firebase:firebase-messaging'
