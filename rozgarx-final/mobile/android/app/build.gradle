@@ -46,7 +46,7 @@ flutter {
 }
 
 dependencies {
-    coreLibraryDesugaring "com.android.tools.build:desugaring:1.2.2"
+    coreLibraryDesugaring "com.android.tools.build:desugaring:2.0.4"
     implementation platform("com.google.firebase:firebase-bom:32.7.0")
     implementation "com.google.firebase:firebase-analytics"
     implementation "com.google.firebase:firebase-messaging"
