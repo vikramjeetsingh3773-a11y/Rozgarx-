@@ -21,11 +21,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final user = FirebaseAuth.instance.currentUser;
       final isAuth = user != null;
-      final isSplash = state.matchedLocation == '/splash';
-      final isLogin = state.matchedLocation == '/login';
-      final isOnboarding = state.matchedLocation == '/onboarding';
-
-      if (isSplash || isLogin || isOnboarding) return null;
+      final loc = state.matchedLocation;
+      final publicRoutes = ['/splash', '/login', '/onboarding'];
+      if (publicRoutes.contains(loc)) return null;
       if (!isAuth) return '/login';
       return null;
     },
@@ -48,14 +46,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/ad-unlock',
-        builder: (context, state) => const AdUnlockScreen(),
+        builder: (context, state) {
+          final feature = state.uri.queryParameters['feature'] ?? 'feature';
+          return AdUnlockScreen(feature: feature);
+        },
       ),
       GoRoute(
         path: '/apply-assistance',
         builder: (context, state) {
           final jobId = state.uri.queryParameters['jobId'] ?? '';
           final jobTitle = state.uri.queryParameters['jobTitle'] ?? '';
-          return ApplyAssistanceScreen(jobId: jobId, jobTitle: jobTitle);
+          return ApplyAssistanceScreen(
+            jobId: jobId,
+            jobTitle: jobTitle,
+          );
         },
       ),
       ShellRoute(
@@ -96,3 +100,4 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
   );
 });
+
