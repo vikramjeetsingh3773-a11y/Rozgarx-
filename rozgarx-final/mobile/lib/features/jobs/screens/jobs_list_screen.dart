@@ -17,7 +17,7 @@ class _JobsListScreenState extends State<JobsListScreen> {
   final List<String> _categories = [
     'All', 'SSC', 'Railway', 'Banking', 'UPSC', 'Police', 'Defence'
   ];
-
+ 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
