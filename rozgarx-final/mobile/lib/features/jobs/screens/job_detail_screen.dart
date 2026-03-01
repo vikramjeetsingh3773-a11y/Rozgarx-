@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
-import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/job_model.dart';
 
 class JobDetailScreen extends StatefulWidget {
   final String jobId;
   const JobDetailScreen({super.key, required this.jobId});
+
   @override
   State<JobDetailScreen> createState() => _JobDetailScreenState();
 }
@@ -17,7 +14,6 @@ class JobDetailScreen extends StatefulWidget {
 class _JobDetailScreenState extends State<JobDetailScreen> {
   JobModel? _job;
   bool _loading = true;
-  bool _isSaved = false;
 
   @override
   void initState() {
@@ -28,509 +24,389 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   Future<void> _loadJob() async {
     try {
       final doc = await FirebaseFirestore.instance
-          .collection('jobs').doc(widget.jobId).get();
+          .collection('jobs')
+          .doc(widget.jobId)
+          .get();
       if (doc.exists && mounted) {
-        final job = JobModel.fromFirestore(doc);
-        // Check saved status
-        final uid = FirebaseAuth.instance.currentUser?.uid;
-        bool saved = false;
-        if (uid != null) {
-          final savedDoc = await FirebaseFirestore.instance
-              .collection('users').doc(uid)
-              .collection('savedJobs').doc(widget.jobId).get();
-          saved = savedDoc.exists;
-        }
-        setState(() { _job = job; _isSaved = saved; _loading = false; });
+        setState(() {
+          _job = JobModel.fromFirestore(doc);
+          _loading = false;
+        });
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _toggleSave() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null || _job == null) return;
-    final ref = FirebaseFirestore.instance
-        .collection('users').doc(uid)
-        .collection('savedJobs').doc(widget.jobId);
-    setState(() => _isSaved = !_isSaved);
-    if (_isSaved) {
-      await ref.set({
-        'jobId': widget.jobId,
-        'savedAt': FieldValue.serverTimestamp(),
-        'jobTitle': _job!.basicInfo.title,
-      });
-    } else {
-      await ref.delete();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Scaffold(
-        body: Center(child: CircularProgressIndicator()));
-    if (_job == null) return Scaffold(
-        appBar: AppBar(),
-        body: const Center(child: Text('Job not found')));
-
-    final job = _job!;
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            floating: true,
-            snap: true,
-            title: Text(job.basicInfo.organization,
-                style: const TextStyle(fontSize: 14)),
-            actions: [
-              IconButton(
-                icon: Icon(
-                    _isSaved ? Icons.bookmark : Icons.bookmark_border),
-                onPressed: _toggleSave,
-              ),
-            ],
+      backgroundColor: const Color(0xFFF8F9FA),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF202124)),
+          onPressed: () => context.pop(),
+        ),
+        title: Text(
+          _job?.organization ?? 'Job Detail',
+          style: const TextStyle(
+              color: Color(0xFF202124),
+              fontSize: 14,
+              fontWeight: FontWeight.w600),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.bookmark_border, color: Color(0xFF202124)),
+            onPressed: () {},
           ),
-          SliverToBoxAdapter(
+        ],
+      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _job == null
+              ? const Center(child: Text('Job not found'))
+              : _buildBody(_job!),
+    );
+  }
+
+  Widget _buildBody(JobModel job) {
+    return Column(
+      children: [
+        Expanded(
+          child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Header
-                Padding(
+                Container(
+                  color: Colors.white,
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    _CategoryBadge(category: job.basicInfo.category),
-                    const SizedBox(height: 8),
-                    Text(job.basicInfo.title,
-                        style: Theme.of(context).textTheme.headlineMedium),
-                    const SizedBox(height: 4),
-                    Text(job.basicInfo.organization,
-                        style: TextStyle(
-                            color: Colors.grey.shade600, fontSize: 13)),
-                    const SizedBox(height: 12),
-                    Wrap(spacing: 10, runSpacing: 8, children: [
-                      if (job.basicInfo.vacancies != null)
-                        _InfoPill(
-                            icon: Icons.people_outline,
-                            text:
-                                '${job.basicInfo.vacancies} Vacancies',
-                            color: AppColors.primary),
-                      _InfoPill(
-                          icon: Icons.currency_rupee,
-                          text: job.salaryDisplay,
-                          color: AppColors.success),
-                      _InfoPill(
-                          icon: Icons.location_on_outlined,
-                          text: job.basicInfo.isNational
-                              ? 'All India'
-                              : (job.basicInfo.state ?? 'India'),
-                          color: Colors.orange),
-                    ]),
-                  ]),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _CategoryBadge(category: job.category),
+                      const SizedBox(height: 8),
+                      Text(job.title,
+                          style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF202124))),
+                      const SizedBox(height: 4),
+                      Text('${job.organization} • ${job.state}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Color(0xFF5F6368))),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          _Pill('👥 ${job.totalVacancies} Vacancies',
+                              const Color(0xFFE8F0FE),
+                              const Color(0xFF1A73E8)),
+                          _Pill('₹ ${job.salaryMin}–${job.salaryMax}',
+                              const Color(0xFFE6F4EA),
+                              const Color(0xFF34A853)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
 
-                // AI Summary
-                if (job.aiSummary != null) ...[
-                  _Section(title: '🤖 AI Summary', child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(job.aiSummary!,
-                        style: TextStyle(
-                            color: Colors.grey.shade700,
-                            height: 1.5, fontSize: 13)),
-                  )),
-                ],
+                const SizedBox(height: 6),
 
                 // Important Dates
                 _Section(
                   title: '📅 Important Dates',
-                  child: _DatesTable(dates: job.importantDates),
+                  child: Column(
+                    children: [
+                      _DateRow('Application Start',
+                          _formatDate(job.applicationStart)),
+                      _DateRow('Last Date',
+                          _formatDate(job.applicationEnd),
+                          isUrgent: job.isClosingSoon),
+                      if (job.examDate != null)
+                        _DateRow('Exam Date', job.examDate!),
+                    ],
+                  ),
                 ),
 
-                // Vacancy breakdown
-                if (job.vacancies.general != null)
-                  _Section(
-                    title: '👥 Category-wise Vacancies',
-                    child: _VacancyTable(vacancies: job.vacancies),
-                  ),
+                const SizedBox(height: 6),
 
                 // Eligibility
                 _Section(
-                  title: '🎓 Eligibility',
-                  child: _EligibilitySection(eligibility: job.eligibility),
+                  title: '✅ Eligibility',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _InfoRow('Education', job.eligibility),
+                      _InfoRow('Age Limit', job.ageLimit),
+                      _InfoRow('Application Fee',
+                          job.applicationFee == 0
+                              ? 'Free'
+                              : '₹${job.applicationFee.toInt()}'),
+                    ],
+                  ),
                 ),
 
-                // Selection process
-                if (job.applicationDetails.selectionProcess.isNotEmpty)
-                  _Section(
-                    title: '🏆 Selection Process',
-                    child: _SelectionStages(
-                        stages: job.applicationDetails.selectionProcess),
-                  ),
+                const SizedBox(height: 6),
 
-                // Exam pattern
-                if (job.examPattern != null)
-                  _Section(
-                    title: '📝 Exam Pattern',
-                    child: _ExamPatternSection(pattern: job.examPattern!),
-                  ),
-
-                // AI Analytics (premium teaser)
+                // Competition
                 _Section(
                   title: '📊 Competition Analysis',
-                  child: _AnalyticsSection(job: job),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _AnalyticsCard(
+                          label: 'Competition',
+                          value: job.competitionLevel,
+                          color: _compColor(job.competitionLevel),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _AnalyticsCard(
+                          label: 'Difficulty',
+                          value: '${job.difficultyScore}/10',
+                          color: const Color(0xFFF9AB00),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
 
-                const SizedBox(height: 100),
+                const SizedBox(height: 80),
               ],
             ),
           ),
-        ],
-      ),
+        ),
 
-      // Bottom action bar
-      bottomNavigationBar: _BottomActionBar(
-        job: job,
-        onViewPDF: job.applicationDetails.officialNotificationPDF != null
-            ? () => context.push('/pdf', extra: {
-                'jobId': job.jobId,
-                'jobTitle': job.basicInfo.title,
-                'directUrl': job.applicationDetails.officialNotificationPDF,
-              })
-            : null,
-        onApply: () => context.push('/ad-unlock', extra: {
-          'feature': 'apply_assistance',
-          'jobTitle': job.basicInfo.title,
-        }),
-      ),
+        // Bottom Actions
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+          child: Row(
+            children: [
+              if (job.pdfUrl != null)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.picture_as_pdf, size: 16),
+                    label: const Text('PDF',
+                        style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF1A73E8),
+                      side: const BorderSide(color: Color(0xFF1A73E8)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              if (job.pdfUrl != null) const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                        '/apply-assistance?jobId=${job.id}&jobTitle=${Uri.encodeComponent(job.title)}');
+                  },
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Apply Now',
+                      style: TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w700)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1A73E8),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
-}
 
-// ── Sub-widgets
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'TBA';
+    return '${date.day}/${date.month}/${date.year}';
+  }
 
-class _Section extends StatelessWidget {
-  final String title;
-  final Widget child;
-  const _Section({required this.title, required this.child});
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-        child: Text(title, style: const TextStyle(
-            fontSize: 15, fontWeight: FontWeight.w700)),
-      ),
-      child,
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        child: Divider(color: Colors.grey.shade100),
-      ),
-    ],
-  );
+  Color _compColor(String level) {
+    switch (level.toLowerCase()) {
+      case 'extreme': return const Color(0xFFEA4335);
+      case 'high': return const Color(0xFFF9AB00);
+      default: return const Color(0xFF34A853);
+    }
+  }
 }
 
 class _CategoryBadge extends StatelessWidget {
   final String category;
   const _CategoryBadge({required this.category});
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-      color: AppColors.primary.withOpacity(0.1),
-      borderRadius: BorderRadius.circular(6),
-    ),
-    child: Text(category, style: const TextStyle(
-        fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.primary)),
-  );
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F0FE),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(category.toUpperCase(),
+          style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: Color(0xFF1A73E8),
+              letterSpacing: 0.5)),
+    );
+  }
 }
 
-class _InfoPill extends StatelessWidget {
-  final IconData icon;
-  final String text;
-  final Color color;
-  const _InfoPill({required this.icon, required this.text, required this.color});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 13, color: color),
-      const SizedBox(width: 4),
-      Text(text, style: TextStyle(
-          fontSize: 12, color: color, fontWeight: FontWeight.w500)),
-    ]),
-  );
-}
+class _Section extends StatelessWidget {
+  final String title;
+  final Widget child;
+  const _Section({required this.title, required this.child});
 
-class _DatesTable extends StatelessWidget {
-  final JobImportantDates dates;
-  const _DatesTable({required this.dates});
-  String _fmt(DateTime? d) => d == null ? 'N/A' :
-      DateFormat('dd MMM yyyy').format(d);
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(children: [
-      _DateRow('Application Start', _fmt(dates.applicationStartDate)),
-      _DateRow('Last Date to Apply', _fmt(dates.lastDate),
-          highlight: dates.lastDate != null &&
-              dates.lastDate!.difference(DateTime.now()).inDays <= 7),
-      _DateRow('Exam Date', _fmt(dates.examDate)),
-      _DateRow('Admit Card', _fmt(dates.admitCardDate)),
-      _DateRow('Result Date', _fmt(dates.resultDate)),
-    ]),
-  );
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF202124))),
+          const SizedBox(height: 10),
+          child,
+        ],
+      ),
+    );
+  }
 }
 
 class _DateRow extends StatelessWidget {
   final String label;
   final String value;
-  final bool highlight;
-  const _DateRow(this.label, this.value, {this.highlight = false});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(children: [
-      Expanded(child: Text(label,
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13))),
-      Text(value, style: TextStyle(
-          fontWeight: FontWeight.w600, fontSize: 13,
-          color: highlight ? AppColors.error : null)),
-    ]),
-  );
-}
+  final bool isUrgent;
+  const _DateRow(this.label, this.value, {this.isUrgent = false});
 
-class _VacancyTable extends StatelessWidget {
-  final JobVacancies vacancies;
-  const _VacancyTable({required this.vacancies});
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(children: [
-      if (vacancies.total != null)
-        _VRow('Total', vacancies.total!, bold: true),
-      if (vacancies.general != null) _VRow('General (UR)', vacancies.general!),
-      if (vacancies.obc != null) _VRow('OBC', vacancies.obc!),
-      if (vacancies.sc != null) _VRow('SC', vacancies.sc!),
-      if (vacancies.st != null) _VRow('ST', vacancies.st!),
-      if (vacancies.ews != null) _VRow('EWS', vacancies.ews!),
-    ]),
-  );
-}
-
-class _VRow extends StatelessWidget {
-  final String label;
-  final int value;
-  final bool bold;
-  const _VRow(this.label, this.value, {this.bold = false});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(children: [
-      Expanded(child: Text(label, style: TextStyle(
-          color: Colors.grey.shade700, fontSize: 13,
-          fontWeight: bold ? FontWeight.w700 : FontWeight.normal))),
-      Text('$value', style: TextStyle(
-          fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-          fontSize: 13, color: bold ? AppColors.primary : null)),
-    ]),
-  );
-}
-
-class _EligibilitySection extends StatelessWidget {
-  final JobEligibility eligibility;
-  const _EligibilitySection({required this.eligibility});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (eligibility.educationRequired.isNotEmpty)
-        _EligRow('Qualification',
-            eligibility.educationRequired.join(', ')),
-      if (eligibility.ageMin != null)
-        _EligRow('Age Limit',
-            '${eligibility.ageMin} – ${eligibility.ageMax} years'),
-      if (eligibility.experienceRequired != null)
-        _EligRow('Experience', eligibility.experienceRequired!),
-    ]),
-  );
-}
-
-class _EligRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _EligRow(this.label, this.value);
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(
-          color: Colors.grey.shade500, fontSize: 11)),
-      Text(value, style: const TextStyle(
-          fontSize: 13, fontWeight: FontWeight.w500)),
-    ]),
-  );
-}
-
-class _SelectionStages extends StatelessWidget {
-  final List<SelectionStage> stages;
-  const _SelectionStages({required this.stages});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Column(children: stages.map((s) => Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 24, height: 24,
-          decoration: BoxDecoration(
-              color: AppColors.primary, shape: BoxShape.circle),
-          child: Center(child: Text('${s.stage}', style: const TextStyle(
-              color: Colors.white, fontSize: 11,
-              fontWeight: FontWeight.w700))),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-            Text(s.name, style: const TextStyle(
-                fontWeight: FontWeight.w600, fontSize: 13)),
-            if (s.description != null)
-              Text(s.description!, style: TextStyle(
-                  color: Colors.grey.shade600, fontSize: 12)),
-          ]),
-        )),
-      ],
-    )).toList()),
-  );
-}
-
-class _ExamPatternSection extends StatelessWidget {
-  final ExamPattern pattern;
-  const _ExamPatternSection({required this.pattern});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Wrap(spacing: 10, runSpacing: 10, children: [
-      if (pattern.totalQuestions != null)
-        _PatternChip('${pattern.totalQuestions} Questions'),
-      if (pattern.totalMarks != null)
-        _PatternChip('${pattern.totalMarks} Marks'),
-      if (pattern.durationMinutes != null)
-        _PatternChip('${pattern.durationMinutes} Minutes'),
-      if (pattern.negativeMarking != null)
-        _PatternChip('-${pattern.negativeMarking} Negative'),
-      if (pattern.mode != null) _PatternChip(pattern.mode!),
-    ]),
-  );
-}
-
-class _PatternChip extends StatelessWidget {
-  final String text;
-  const _PatternChip(this.text);
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-    decoration: BoxDecoration(
-      color: Colors.grey.shade100,
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Text(text, style: const TextStyle(
-        fontSize: 12, fontWeight: FontWeight.w500)),
-  );
-}
-
-class _AnalyticsSection extends StatelessWidget {
-  final JobModel job;
-  const _AnalyticsSection({required this.job});
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 16),
-    child: Row(children: [
-      Expanded(child: _AnalyticsTile(
-          label: 'Competition',
-          value: job.analytics.competitionLevel ?? 'Analyzing...',
-          color: _compColor(job.analytics.competitionLevel))),
-      const SizedBox(width: 12),
-      Expanded(child: _AnalyticsTile(
-          label: 'Difficulty',
-          value: job.analytics.difficultyScore != null
-              ? '${job.analytics.difficultyScore}/10'
-              : 'Analyzing...',
-          color: AppColors.warning)),
-    ]),
-  );
-
-  Color _compColor(String? level) {
-    switch (level?.toLowerCase()) {
-      case 'low': return AppColors.success;
-      case 'high': return AppColors.error;
-      default: return AppColors.warning;
-    }
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 12, color: Color(0xFF5F6368))),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isUrgent
+                      ? const Color(0xFFEA4335)
+                      : const Color(0xFF202124))),
+        ],
+      ),
+    );
   }
 }
 
-class _AnalyticsTile extends StatelessWidget {
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _InfoRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 12, color: Color(0xFF5F6368))),
+          ),
+          Expanded(
+            child: Text(value,
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF202124))),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Pill extends StatelessWidget {
+  final String text;
+  final Color bg;
+  final Color fg;
+  const _Pill(this.text, this.bg, this.fg);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration:
+          BoxDecoration(color: bg, borderRadius: BorderRadius.circular(10)),
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w600, color: fg)),
+    );
+  }
+}
+
+class _AnalyticsCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _AnalyticsTile({required this.label, required this.value, required this.color});
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: color.withOpacity(0.08),
-      borderRadius: BorderRadius.circular(10),
-      border: Border.all(color: color.withOpacity(0.2)),
-    ),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(color: color.withOpacity(0.7),
-          fontSize: 11, fontWeight: FontWeight.w500)),
-      const SizedBox(height: 4),
-      Text(value, style: TextStyle(color: color,
-          fontSize: 15, fontWeight: FontWeight.w700)),
-    ]),
-  );
-}
+  const _AnalyticsCard(
+      {required this.label, required this.value, required this.color});
 
-class _BottomActionBar extends StatelessWidget {
-  final JobModel job;
-  final VoidCallback? onViewPDF;
-  final VoidCallback? onApply;
-  const _BottomActionBar({required this.job, this.onViewPDF, this.onApply});
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-    decoration: BoxDecoration(
-      color: Theme.of(context).cardTheme.color,
-      border: Border(top: BorderSide(color: Colors.grey.shade200)),
-    ),
-    child: Row(children: [
-      if (onViewPDF != null)
-        Expanded(child: OutlinedButton.icon(
-          icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-          label: const Text('View PDF'),
-          onPressed: onViewPDF,
-          style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.primary)),
-        )),
-      if (onViewPDF != null) const SizedBox(width: 12),
-      Expanded(
-        flex: 2,
-        child: ElevatedButton.icon(
-          icon: const Icon(Icons.open_in_browser, size: 16),
-          label: const Text('Apply Now'),
-          onPressed: onApply,
-          style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12)),
-        ),
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
-    ]),
-  );
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: color)),
+          const SizedBox(height: 4),
+          Text(value,
+              style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: color)),
+        ],
+      ),
+    );
+  }
 }
