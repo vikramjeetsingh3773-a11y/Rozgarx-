@@ -46,7 +46,7 @@ jobs:
 
       # ── 4. Verify Flutter
       - name: "Verify Flutter"
-        run: flutter --version
+        run: flutter --version 
 
       # ── 5. Show repo structure for debugging
       - name: "Show repo structure"
