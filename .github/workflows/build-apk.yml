@@ -87,6 +87,63 @@ jobs:
           touch assets/fonts/.gitkeep
           echo "Asset folders ready"
 
+      - name: "Generate app launcher icons"
+        working-directory: rozgarx-final/mobile
+        run: |
+          # Create all mipmap directories
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+
+          # Generate a simple blue RX icon using Python
+          python3 - << 'PYEOF'
+          import struct, zlib, os
+
+          def make_png(size, r, g, b):
+              def chunk(name, data):
+                  c = zlib.crc32(name + data) & 0xffffffff
+                  return struct.pack('>I', len(data)) + name + data + struct.pack('>I', c)
+              ihdr = struct.pack('>IIBBBBB', size, size, 8, 2, 0, 0, 0)
+              raw = b''
+              for y in range(size):
+                  raw += b'\x00'
+                  for x in range(size):
+                      cx, cy = x - size//2, y - size//2
+                      dist = (cx*cx + cy*cy) ** 0.5
+                      radius = size * 0.42
+                      inner = size * 0.25
+                      if dist <= radius:
+                          if dist <= inner:
+                              raw += bytes([255, 255, 255])
+                          else:
+                              raw += bytes([r, g, b])
+                      else:
+                          raw += bytes([255, 255, 255])
+              compressed = zlib.compress(raw)
+              png = (b'\x89PNG\r\n\x1a\n'
+                     + chunk(b'IHDR', ihdr)
+                     + chunk(b'IDAT', compressed)
+                     + chunk(b'IEND', b''))
+              return png
+
+          sizes = {
+              'mipmap-mdpi': 48,
+              'mipmap-hdpi': 72,
+              'mipmap-xhdpi': 96,
+              'mipmap-xxhdpi': 144,
+              'mipmap-xxxhdpi': 192,
+          }
+          for folder, size in sizes.items():
+              path = f'android/app/src/main/res/{folder}/ic_launcher.png'
+              with open(path, 'wb') as f:
+                  f.write(make_png(size, 26, 115, 232))
+              print(f'Created {path} ({size}x{size})')
+          PYEOF
+          echo "Icons generated successfully"
+          ls android/app/src/main/res/mipmap-mdpi/
+
       # ── 8. Flutter pub get
       - name: "Flutter pub get"
         working-directory: rozgarx-final/mobile
