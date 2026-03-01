@@ -24,7 +24,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
       final publicRoutes = ['/splash', '/login', '/onboarding'];
       if (publicRoutes.contains(loc)) return null;
-      if (!isAuth) return '/login';
+      if (!isAuth) return '/login'; 
       return null;
     },
     routes: [
